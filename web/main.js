@@ -4,6 +4,8 @@
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 // builtin_scale の id 順(wasm と共有する契約, requirements §5.1)
 const SCALE_NAMES = ["Ionian", "Dorian", "Phrygian", "Lydian", "Mixolydian", "Aeolian", "Locrian"];
+// ルートからの半音距離 → テンション度数ラベル(tertian)。major/minor 両集合で衝突しない。
+const DEGREE_LABEL = { 0: "R", 2: "9", 3: "m3", 4: "M3", 5: "11", 6: "#11", 7: "P5", 9: "13", 10: "m7", 11: "M7" };
 
 const FOURTH = 5; // 完全4度 = 5 半音(時計回りの1歩)
 const CENTER = 300;
@@ -11,7 +13,7 @@ const R_OUTER = 260;
 const R_INNER = 120;
 
 let wasm;
-const state = { home: 9 /* A */, scaleId: 5 /* Aeolian */ };
+const state = { home: 9 /* A */, scaleId: 5 /* Aeolian */, quality: 0 /* 0=Major 1=Minor */ };
 
 async function init() {
   const resp = await fetch("quartal_loom_wasm.wasm");
@@ -28,6 +30,15 @@ async function init() {
   for (let id = 0; id < count; id++) scaleSel.add(new Option(SCALE_NAMES[id] ?? `#${id}`, id));
   scaleSel.value = state.scaleId;
   scaleSel.addEventListener("change", (e) => { state.scaleId = +e.target.value; render(); });
+
+  const toggle = document.getElementById("quality");
+  toggle.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    state.quality = +btn.dataset.q;
+    [...toggle.children].forEach((b) => b.classList.toggle("active", b === btn));
+    render();
+  });
 
   render();
 }
@@ -54,6 +65,7 @@ function wedgePath(s) {
 function render() {
   const scaleMask = wasm.builtin_scale(state.scaleId);
   const onScale = wasm.scale_pitch_mask(state.home, scaleMask); // bit p = pitch p on-scale
+  const tension = wasm.tension_pitch_mask(state.home, state.quality); // bit p = テンション音
 
   const svg = document.getElementById("wheel");
   svg.innerHTML = "";
@@ -63,24 +75,40 @@ function render() {
     // ホームを最上部(スロット0)に固定 → スロット s のキー = home + 5*s (4度圏の時計回り)
     const pitch = (state.home + FOURTH * s) % 12;
     const isOn = (onScale >> pitch) & 1;
+    const isTension = (tension >> pitch) & 1;
 
     const path = document.createElementNS(ns, "path");
     path.setAttribute("d", wedgePath(s));
     path.setAttribute("class", "sector");
     path.setAttribute("fill", isOn ? "#2c3550" : "#141414");
-    path.setAttribute("stroke", "#000");
-    path.setAttribute("stroke-width", "1");
+    path.setAttribute("stroke", isTension ? "#6cf" : "#000");
+    path.setAttribute("stroke-width", isTension ? "2" : "1");
     svg.appendChild(path);
 
-    const [lx, ly] = polar(s * 30, (R_OUTER + R_INNER) / 2);
+    // 音名(セクタ上部寄り)
+    const [lx, ly] = polar(s * 30, (R_OUTER + R_INNER) / 2 + 18);
     const label = document.createElementNS(ns, "text");
     label.setAttribute("x", lx);
     label.setAttribute("y", ly);
     label.setAttribute("class", "note-label");
-    label.setAttribute("font-size", s === 0 ? "34" : "28");
+    label.setAttribute("font-size", s === 0 ? "30" : "26");
     label.setAttribute("fill", isOn ? "#ffffff" : "#3a3a3a");
     label.textContent = NOTE_NAMES[pitch];
     svg.appendChild(label);
+
+    // テンション役割ラベル(セクタ内側・ホーム和音の度数)。明暗=オンスケール。
+    if (isTension) {
+      const interval = (pitch - state.home + 12) % 12;
+      const [tx, ty] = polar(s * 30, (R_OUTER + R_INNER) / 2 - 20);
+      const tlabel = document.createElementNS(ns, "text");
+      tlabel.setAttribute("x", tx);
+      tlabel.setAttribute("y", ty);
+      tlabel.setAttribute("class", "tension-label");
+      tlabel.setAttribute("font-size", "17");
+      tlabel.setAttribute("fill", isOn ? "#9ecbff" : "#37506e");
+      tlabel.textContent = DEGREE_LABEL[interval] ?? "";
+      svg.appendChild(tlabel);
+    }
   }
 
   // ホーム位置(最上部)の目印リング

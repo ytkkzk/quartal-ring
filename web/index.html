@@ -23,6 +23,12 @@
   .sector { transition: fill .15s; }
   .note-label { font-family: Georgia, "Times New Roman", serif; text-anchor: middle; dominant-baseline: middle; }
   .home-ring { fill: none; stroke: #6cf; stroke-width: 2; opacity: .5; }
+  .tension-label { font-family: "Segoe UI", system-ui, sans-serif; text-anchor: middle; dominant-baseline: middle; font-weight: 600; }
+  .toggle { display: inline-flex; border: 1px solid #444; border-radius: 6px; overflow: hidden; }
+  .toggle button {
+    background: #1a1a1a; color: #999; border: 0; padding: 6px 14px; font-size: 14px; cursor: pointer;
+  }
+  .toggle button.active { background: #2c3550; color: #fff; }
   footer { color: #555; font-size: 11px; }
 </style>
 </head>
@@ -34,6 +40,12 @@
     </label>
     <label>Scale
       <select id="scale"></select>
+    </label>
+    <label>Tension 堆積
+      <div class="toggle" id="quality">
+        <button data-q="0" class="active">Major</button>
+        <button data-q="1">Minor</button>
+      </div>
     </label>
   </div>
   <svg id="wheel" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg"></svg>
