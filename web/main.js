@@ -74,6 +74,19 @@ function wedgePath(s) {
 
 const NS = "http://www.w3.org/2000/svg";
 
+// TSDロール: 4度圏の時計位置を mod3 で3群に分ける(12/3/6/9=明, 1/4/7/10=中, 2/5/8/11=暗)。
+// 値(明/中/暗)=ロール群、彩度=スケール所属(有彩=オンスケール / 無彩=アウト)。
+const HUE = 205; // オンスケール時の色相
+function levelOf(slot) { return slot % 3; } // 0=light 1=middle 2=dark
+function letterColor(slot, on) {
+  const L = [84, 64, 46][levelOf(slot)];
+  return on ? `hsl(${HUE} 78% ${L}%)` : `hsl(0 0% ${L}%)`;
+}
+function sectorFill(slot, on) {
+  const L = [22, 15, 9][levelOf(slot)];
+  return on ? `hsl(${HUE} 42% ${L}%)` : `hsl(0 0% ${L}%)`;
+}
+
 function text(parent, x, y, cls, size, fill, content) {
   const t = document.createElementNS(NS, "text");
   t.setAttribute("x", x);
@@ -102,15 +115,15 @@ function render() {
     const path = document.createElementNS(NS, "path");
     path.setAttribute("d", wedgePath(s));
     path.setAttribute("class", "sector");
-    path.setAttribute("fill", rootOn ? "#26304a" : "#141414");
+    path.setAttribute("fill", sectorFill(s, rootOn));
     path.setAttribute("stroke", "#000");
     path.setAttribute("stroke-width", "1");
     svg.appendChild(path);
 
-    // コードルート名(正立)
+    // コードルート名(正立)。値=TSDロール群、彩度=オンスケール。
     const [lx, ly] = polar(s * 30, R_LETTER);
     text(svg, lx, ly, "note-label", s === 0 ? "26" : "23",
-         rootOn ? "#ffffff" : "#3a3a3a", NOTE_NAMES[root]);
+         letterColor(s, rootOn), NOTE_NAMES[root]);
 
     // このキーを root とした堆積7音を、セクタに沿って放射状に併記。明暗=オンスケール。
     const g = document.createElementNS(NS, "g");
@@ -121,19 +134,10 @@ function render() {
       const pitch = (root + iv) % 12;
       const on = (onScale >> pitch) & 1;
       const y = CENTER - (R_LIST_TOP - i * step);
-      text(g, CENTER, y, "tension-label", "13",
+      text(g, CENTER, y, "tension-label", "11",
            on ? "#cfe3ff" : "#3d3d3d", `${label} ${NOTE_NAMES[pitch]}`);
     });
   }
-
-  // ホーム位置(最上部)の目印リング
-  const [hx, hy] = polar(0, R_LETTER);
-  const ring = document.createElementNS(NS, "circle");
-  ring.setAttribute("cx", hx);
-  ring.setAttribute("cy", hy);
-  ring.setAttribute("r", 22);
-  ring.setAttribute("class", "home-ring");
-  svg.appendChild(ring);
 }
 
 init();
