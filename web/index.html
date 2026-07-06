@@ -4,45 +4,40 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Quartal Loom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cardo:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: #000; color: #eee;
-    font-family: "Segoe UI", system-ui, sans-serif;
+    font-family: "Cardo", Georgia, serif;
     height: 100vh; overflow: hidden;
     display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px;
   }
-  h1 { font-weight: 300; letter-spacing: .15em; margin: 2px 0; font-size: 20px; }
-  .controls { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+  h1 { font-weight: 400; letter-spacing: .15em; margin: 2px 0; font-size: 20px; }
+  .controls { display: flex; gap: 20px; align-items: flex-end; justify-content: center; }
   .controls label { display: flex; flex-direction: column; font-size: 12px; color: #aaa; gap: 4px; }
-  select {
-    background: #1a1a1a; color: #eee; border: 1px solid #444; border-radius: 6px;
-    padding: 6px 10px; font-size: 14px;
+  /* コントロール(約70px)とフッタ(約24px)を除いた領域に、縦横比を保って最大内接 */
+  #wheel { flex: 1 1 auto; min-height: 0; width: min(98vw, calc(100vh - 120px)); aspect-ratio: 1 / 1; height: auto; }
+  .note-label, .tension-label, .scale-item {
+    font-family: "Cardo", Georgia, serif; text-anchor: middle; dominant-baseline: middle;
   }
-  /* コントロール(約90px)とフッタ(約24px)を除いた領域に、縦横比を保って最大内接 */
-  #wheel { flex: 1 1 auto; min-height: 0; width: min(98vw, calc(100vh - 130px)); aspect-ratio: 1 / 1; height: auto; }
-  .sector { transition: fill .15s; }
-  .note-label { font-family: Georgia, "Times New Roman", serif; text-anchor: middle; dominant-baseline: middle; }
-  .home-ring { fill: none; stroke: #6cf; stroke-width: 2; opacity: .5; }
-  .tension-label { font-family: "Segoe UI", system-ui, sans-serif; text-anchor: middle; dominant-baseline: middle; font-weight: 600; }
+  .sector { cursor: pointer; }
+  .scale-item { cursor: pointer; }
   .toggle { display: inline-flex; border: 1px solid #444; border-radius: 6px; overflow: hidden; }
   .toggle button {
     background: #1a1a1a; color: #999; border: 0; padding: 6px 14px; font-size: 14px; cursor: pointer;
+    font-family: "Cardo", Georgia, serif;
   }
-  .toggle button.active { background: #2c3550; color: #fff; }
+  .toggle button.active { background: #5a1717; color: #fff; }
   footer { color: #555; font-size: 11px; }
 </style>
 </head>
 <body>
   <h1>QUARTAL&nbsp;LOOM</h1>
   <div class="controls">
-    <label>Home key
-      <select id="home"></select>
-    </label>
-    <label>Scale
-      <select id="scale"></select>
-    </label>
     <label>Tension 堆積
       <div class="toggle" id="quality">
         <button data-q="0" class="active">Major</button>
@@ -51,7 +46,7 @@
     </label>
   </div>
   <svg id="wheel" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg"></svg>
-  <footer>有彩=オンスケール / 無彩=スケールアウト ・ 明暗=TSDロール群(12/3/6/9 &gt; 1/4/7/10 &gt; 2/5/8/11) ・ home=12時固定</footer>
+  <footer>セクタをクリック=そのルートへ回転 ・ 中央=スケール選択 ・ 有彩(マルーン)=オンスケール / 無彩=アウト ・ 明暗=TSDロール群</footer>
   <script type="module" src="main.js"></script>
 </body>
 </html>
