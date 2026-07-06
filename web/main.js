@@ -7,10 +7,20 @@ const SCALE_NAMES = ["Ionian", "Dorian", "Phrygian", "Lydian", "Mixolydian", "Ae
 // ルートからの半音距離 → テンション度数ラベル(tertian)。major/minor 両集合で衝突しない。
 const DEGREE_LABEL = { 0: "R", 2: "9", 3: "m3", 4: "M3", 5: "11", 6: "#11", 7: "P5", 9: "13", 10: "m7", 11: "M7" };
 
+// 堆積の tertian 表示順(度数ラベルと root からの半音)。core の TENSION テーブルを表示側にミラー。
+// major/minor で 3rd,7th,11th が変わる。集合の正本は wasm(core), これは並び/ラベルの写像。
+const DEGREES = {
+  0: [["R", 0], ["M3", 4], ["P5", 7], ["M7", 11], ["9", 2], ["#11", 6], ["13", 9]], // Major
+  1: [["R", 0], ["m3", 3], ["P5", 7], ["m7", 10], ["9", 2], ["11", 5], ["13", 9]],   // Minor
+};
+
 const FOURTH = 5; // 完全4度 = 5 半音(時計回りの1歩)
 const CENTER = 300;
-const R_OUTER = 260;
-const R_INNER = 120;
+const R_OUTER = 282;
+const R_INNER = 88;
+const R_LETTER = R_OUTER - 22;   // コードルート名の半径
+const R_LIST_TOP = R_OUTER - 52; // 堆積リストの最外
+const R_LIST_BOT = R_INNER + 14; // 堆積リストの最内
 
 let wasm;
 const state = { home: 9 /* A */, scaleId: 5 /* Aeolian */, quality: 0 /* 0=Major 1=Minor */ };
@@ -62,61 +72,66 @@ function wedgePath(s) {
        + ` L ${ix1} ${iy1} A ${R_INNER} ${R_INNER} 0 0 0 ${ix0} ${iy0} Z`;
 }
 
+const NS = "http://www.w3.org/2000/svg";
+
+function text(parent, x, y, cls, size, fill, content) {
+  const t = document.createElementNS(NS, "text");
+  t.setAttribute("x", x);
+  t.setAttribute("y", y);
+  t.setAttribute("class", cls);
+  t.setAttribute("font-size", size);
+  t.setAttribute("fill", fill);
+  t.textContent = content;
+  parent.appendChild(t);
+  return t;
+}
+
 function render() {
   const scaleMask = wasm.builtin_scale(state.scaleId);
   const onScale = wasm.scale_pitch_mask(state.home, scaleMask); // bit p = pitch p on-scale
-  const tension = wasm.tension_pitch_mask(state.home, state.quality); // bit p = テンション音
+  const degrees = DEGREES[state.quality];
 
   const svg = document.getElementById("wheel");
   svg.innerHTML = "";
-  const ns = "http://www.w3.org/2000/svg";
 
   for (let s = 0; s < 12; s++) {
     // ホームを最上部(スロット0)に固定 → スロット s のキー = home + 5*s (4度圏の時計回り)
-    const pitch = (state.home + FOURTH * s) % 12;
-    const isOn = (onScale >> pitch) & 1;
-    const isTension = (tension >> pitch) & 1;
+    const root = (state.home + FOURTH * s) % 12;
+    const rootOn = (onScale >> root) & 1;
 
-    const path = document.createElementNS(ns, "path");
+    const path = document.createElementNS(NS, "path");
     path.setAttribute("d", wedgePath(s));
     path.setAttribute("class", "sector");
-    path.setAttribute("fill", isOn ? "#2c3550" : "#141414");
-    path.setAttribute("stroke", isTension ? "#6cf" : "#000");
-    path.setAttribute("stroke-width", isTension ? "2" : "1");
+    path.setAttribute("fill", rootOn ? "#26304a" : "#141414");
+    path.setAttribute("stroke", "#000");
+    path.setAttribute("stroke-width", "1");
     svg.appendChild(path);
 
-    // 音名(セクタ上部寄り)
-    const [lx, ly] = polar(s * 30, (R_OUTER + R_INNER) / 2 + 18);
-    const label = document.createElementNS(ns, "text");
-    label.setAttribute("x", lx);
-    label.setAttribute("y", ly);
-    label.setAttribute("class", "note-label");
-    label.setAttribute("font-size", s === 0 ? "30" : "26");
-    label.setAttribute("fill", isOn ? "#ffffff" : "#3a3a3a");
-    label.textContent = NOTE_NAMES[pitch];
-    svg.appendChild(label);
+    // コードルート名(正立)
+    const [lx, ly] = polar(s * 30, R_LETTER);
+    text(svg, lx, ly, "note-label", s === 0 ? "26" : "23",
+         rootOn ? "#ffffff" : "#3a3a3a", NOTE_NAMES[root]);
 
-    // テンション役割ラベル(セクタ内側・ホーム和音の度数)。明暗=オンスケール。
-    if (isTension) {
-      const interval = (pitch - state.home + 12) % 12;
-      const [tx, ty] = polar(s * 30, (R_OUTER + R_INNER) / 2 - 20);
-      const tlabel = document.createElementNS(ns, "text");
-      tlabel.setAttribute("x", tx);
-      tlabel.setAttribute("y", ty);
-      tlabel.setAttribute("class", "tension-label");
-      tlabel.setAttribute("font-size", "17");
-      tlabel.setAttribute("fill", isOn ? "#9ecbff" : "#37506e");
-      tlabel.textContent = DEGREE_LABEL[interval] ?? "";
-      svg.appendChild(tlabel);
-    }
+    // このキーを root とした堆積7音を、セクタに沿って放射状に併記。明暗=オンスケール。
+    const g = document.createElementNS(NS, "g");
+    g.setAttribute("transform", `rotate(${s * 30} ${CENTER} ${CENTER})`);
+    svg.appendChild(g);
+    const step = (R_LIST_TOP - R_LIST_BOT) / (degrees.length - 1);
+    degrees.forEach(([label, iv], i) => {
+      const pitch = (root + iv) % 12;
+      const on = (onScale >> pitch) & 1;
+      const y = CENTER - (R_LIST_TOP - i * step);
+      text(g, CENTER, y, "tension-label", "13",
+           on ? "#cfe3ff" : "#3d3d3d", `${label} ${NOTE_NAMES[pitch]}`);
+    });
   }
 
   // ホーム位置(最上部)の目印リング
-  const [hx, hy] = polar(0, (R_OUTER + R_INNER) / 2);
-  const ring = document.createElementNS(ns, "circle");
+  const [hx, hy] = polar(0, R_LETTER);
+  const ring = document.createElementNS(NS, "circle");
   ring.setAttribute("cx", hx);
   ring.setAttribute("cy", hy);
-  ring.setAttribute("r", 30);
+  ring.setAttribute("r", 22);
   ring.setAttribute("class", "home-ring");
   svg.appendChild(ring);
 }
