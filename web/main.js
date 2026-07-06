@@ -4,6 +4,8 @@
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 // builtin_scale の id 順(wasm と共有する契約, requirements §5.1)
 const SCALE_NAMES = ["Ionian", "Dorian", "Phrygian", "Lydian", "Mixolydian", "Aeolian", "Locrian"];
+// 中央一覧の表示順(モードの明→暗順)。値=builtin_scale の id。
+const SCALE_ORDER = [3, 0, 4, 1, 5, 2, 6]; // Lydian,Ionian,Mixolydian,Dorian,Aeolian,Phrygian,Locrian
 // 堆積の tertian 表示順(度数ラベルと root からの半音)。core の TENSION テーブルを表示側にミラー。
 const DEGREES = {
   0: [["R", 0], ["M3", 4], ["P5", 7], ["M7", 11], ["9", 2], ["#11", 6], ["13", 9]], // Major
@@ -12,15 +14,17 @@ const DEGREES = {
 
 // 有彩色の色相=マルーン(#600000 ≒ hue 0)。彩度/明度は視認性優先で調整。
 const HUE = 0;
-function levelOf(slot) { return slot % 3; }
 // セクタ背景: TSDロール群の値のみ(彩度なし)。12/3/6/9=最暗 > 1/4/7/10=暗 > 2/5/8/11=中。
-function sectorFill(slot) {
-  return `hsl(0 0% ${[8, 16, 30][levelOf(slot)]}%)`;
-}
+function fillHSL(slot) { return { h: 0, s: 0, l: [8, 16, 30][slot % 3] }; }
 // 前景テキスト: スケール所属を彩度で(有彩マルーン=オンスケール / 無彩=アウト)。
-function textColor(on) {
-  return on ? `hsl(${HUE} 65% 58%)` : `hsl(0 0% 46%)`;
+function textHSL(on) { return on ? { h: HUE, s: 80, l: 60 } : { h: 0, s: 0, l: 46 }; }
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+// 2つのHSLを t で補間して css 文字列に(回転中の明度/彩度イーズ用)。
+function mix(c1, c2, t) {
+  return `hsl(${lerp(c1.h, c2.h, t)} ${lerp(c1.s, c2.s, t)}% ${lerp(c1.l, c2.l, t)}%)`;
 }
+function musicalSlot(pitch, home) { return (((pitch - home) * FOURTH) % 12 + 12) % 12; }
 
 const FOURTH = 5; // 完全4度 = 5 半音(時計回りの1歩)
 const CENTER = 300;
@@ -80,19 +84,28 @@ function svgText(parent, x, y, cls, size, fill, content) {
   return t;
 }
 
-function render() {
+// anim: {from, to, e}。静止時は from=to=home, e=1。回転中は位置=from配置を rot 回転、
+// 色は from→to を e で補間(明度/彩度もイーズ)。
+function render(anim) {
+  const from = anim ? anim.from : state.home;
+  const to = anim ? anim.to : state.home;
+  const e = anim ? anim.e : 1;
   const scaleMask = wasm.builtin_scale(state.scaleId);
-  const onScale = wasm.scale_pitch_mask(state.home, scaleMask); // bit p = pitch p on-scale
+  const onFrom = wasm.scale_pitch_mask(from, scaleMask);
+  const onTo = wasm.scale_pitch_mask(to, scaleMask);
   const degrees = DEGREES[state.quality];
 
   const svg = document.getElementById("wheel");
   svg.innerHTML = "";
 
   for (let s = 0; s < 12; s++) {
-    // ホーム=スロット0(上)。回転アニメ中は rot を加える。
-    const root = (state.home + FOURTH * s) % 12;
-    const rootOn = (onScale >> root) & 1;
+    const root = (from + FOURTH * s) % 12;     // from配置でのスロット s のキー
+    const sNew = musicalSlot(root, to);        // to配置でのスロット(色の着地先)
     const center = s * 30 + rot;
+
+    // 色: from配置(slot s)→to配置(slot sNew) を e で補間
+    const fill = mix(fillHSL(s), fillHSL(sNew), e);
+    const rootColor = mix(textHSL((onFrom >> root) & 1), textHSL((onTo >> root) & 1), e);
 
     const secG = document.createElementNS(NS, "g");
     secG.setAttribute("class", "sector");
@@ -101,13 +114,13 @@ function render() {
 
     const path = document.createElementNS(NS, "path");
     path.setAttribute("d", wedgePathAt(center));
-    path.setAttribute("fill", sectorFill(s));
+    path.setAttribute("fill", fill);
     path.setAttribute("stroke", "none");
     secG.appendChild(path);
 
-    // コードルート名(正立)。彩度=オンスケール。
+    // コードルート名(正立)
     const [lx, ly] = polar(center, R_LETTER);
-    svgText(secG, lx, ly, "note-label", s === 0 ? "26" : "23", textColor(rootOn), NOTE_NAMES[root]);
+    svgText(secG, lx, ly, "note-label", s === 0 ? "26" : "23", rootColor, NOTE_NAMES[root]);
 
     // このキーを root とした堆積7音を、セクタに沿って放射状に併記。
     const g = document.createElementNS(NS, "g");
@@ -116,11 +129,11 @@ function render() {
     const step = (R_LIST_TOP - R_LIST_BOT) / (degrees.length - 1);
     degrees.forEach(([label, iv], i) => {
       const pitch = (root + iv) % 12;
-      const on = (onScale >> pitch) & 1;
+      const color = mix(textHSL((onFrom >> pitch) & 1), textHSL((onTo >> pitch) & 1), e);
       const y = CENTER - (R_LIST_TOP - i * step);
       const t = document.createElementNS(NS, "text");
       t.setAttribute("x", CENTER); t.setAttribute("y", y);
-      t.setAttribute("class", "tension-label"); t.setAttribute("fill", textColor(on));
+      t.setAttribute("class", "tension-label"); t.setAttribute("fill", color);
       const deg = document.createElementNS(NS, "tspan");
       deg.setAttribute("font-size", "8"); deg.textContent = label;
       const nn = document.createElementNS(NS, "tspan");
@@ -133,14 +146,14 @@ function render() {
   drawScaleList(svg);
 }
 
-// 中央にスケール一覧(クリックで切替。現在のものを有彩で強調)。回転しない。
+// 中央にスケール一覧(明→暗順・クリックで切替。現在のものを有彩で強調)。回転しない。
 function drawScaleList(svg) {
   const spacing = 18;
-  SCALE_NAMES.forEach((name, id) => {
-    const y = CENTER + (id - (SCALE_NAMES.length - 1) / 2) * spacing;
+  SCALE_ORDER.forEach((id, i) => {
+    const y = CENTER + (i - (SCALE_ORDER.length - 1) / 2) * spacing;
     const cur = id === state.scaleId;
     const t = svgText(svg, CENTER, y, "scale-item", cur ? "15" : "13",
-                      cur ? `hsl(${HUE} 62% 60%)` : "#777", name);
+                      cur ? `hsl(${HUE} 78% 62%)` : "#777", SCALE_NAMES[id]);
     if (cur) t.setAttribute("font-weight", "700");
     t.addEventListener("click", () => { state.scaleId = id; render(); });
   });
@@ -153,6 +166,7 @@ function spinTo(pitch) {
   if (slot === 0) return;
   let delta = -slot * 30;
   delta = ((delta + 180) % 360 + 360) % 360 - 180; // 最短方向へ正規化
+  const from = state.home;
   const dur = 460;
   const t0 = performance.now();
   animating = true;
@@ -160,7 +174,7 @@ function spinTo(pitch) {
     const p = Math.min(1, (now - t0) / dur);
     const e = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; // easeInOutCubic
     rot = delta * e;
-    render();
+    render({ from, to: pitch, e }); // 位置も色(明度/彩度)も e でイーズ
     if (p < 1) {
       requestAnimationFrame(frame);
     } else {
