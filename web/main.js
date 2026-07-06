@@ -61,7 +61,7 @@ function polar(angleDeg, r) {
 
 // スロット s の環状ウェッジ path(中心角 s*30°, ギャップ付き)
 function wedgePath(s) {
-  const gap = 2;
+  const gap = 0; // 隙間なし(隣接セクタが辺を共有)
   const a0 = s * 30 - 15 + gap;
   const a1 = s * 30 + 15 - gap;
   const [ox0, oy0] = polar(a0, R_OUTER);
@@ -74,17 +74,17 @@ function wedgePath(s) {
 
 const NS = "http://www.w3.org/2000/svg";
 
-// TSDロール: 4度圏の時計位置を mod3 で3群に分ける(12/3/6/9=明, 1/4/7/10=中, 2/5/8/11=暗)。
-// 値(明/中/暗)=ロール群、彩度=スケール所属(有彩=オンスケール / 無彩=アウト)。
+// 原案方式: 背景グレー階調=TSDロール群、前景テキストの彩度=スケール所属。
+// 4度圏の時計位置を mod3 で3群に(12/3/6/9=最暗, 1/4/7/10=暗, 2/5/8/11=中)。
 const HUE = 205; // オンスケール時の色相
-function levelOf(slot) { return slot % 3; } // 0=light 1=middle 2=dark
-function letterColor(slot, on) {
-  const L = [84, 64, 46][levelOf(slot)];
-  return on ? `hsl(${HUE} 78% ${L}%)` : `hsl(0 0% ${L}%)`;
+function levelOf(slot) { return slot % 3; }
+// セクタ背景: TSDロール群の値のみ(彩度なし)。12/3/6/9=最暗 > 1/4/7/10=暗 > 2/5/8/11=中。
+function sectorFill(slot) {
+  return `hsl(0 0% ${[8, 16, 30][levelOf(slot)]}%)`;
 }
-function sectorFill(slot, on) {
-  const L = [22, 15, 9][levelOf(slot)];
-  return on ? `hsl(${HUE} 42% ${L}%)` : `hsl(0 0% ${L}%)`;
+// 前景テキスト: スケール所属を彩度で(有彩=オンスケール / 無彩=アウト)。
+function textColor(on) {
+  return on ? `hsl(${HUE} 80% 76%)` : `hsl(0 0% 46%)`;
 }
 
 function text(parent, x, y, cls, size, fill, content) {
@@ -115,15 +115,14 @@ function render() {
     const path = document.createElementNS(NS, "path");
     path.setAttribute("d", wedgePath(s));
     path.setAttribute("class", "sector");
-    path.setAttribute("fill", sectorFill(s, rootOn));
-    path.setAttribute("stroke", "#000");
-    path.setAttribute("stroke-width", "1");
+    path.setAttribute("fill", sectorFill(s));
+    path.setAttribute("stroke", "none");
     svg.appendChild(path);
 
-    // コードルート名(正立)。値=TSDロール群、彩度=オンスケール。
+    // コードルート名(正立)。彩度=オンスケール。
     const [lx, ly] = polar(s * 30, R_LETTER);
     text(svg, lx, ly, "note-label", s === 0 ? "26" : "23",
-         letterColor(s, rootOn), NOTE_NAMES[root]);
+         textColor(rootOn), NOTE_NAMES[root]);
 
     // このキーを root とした堆積7音を、セクタに沿って放射状に併記。明暗=オンスケール。
     const g = document.createElementNS(NS, "g");
@@ -134,8 +133,21 @@ function render() {
       const pitch = (root + iv) % 12;
       const on = (onScale >> pitch) & 1;
       const y = CENTER - (R_LIST_TOP - i * step);
-      text(g, CENTER, y, "tension-label", "11",
-           on ? "#cfe3ff" : "#3d3d3d", `${label} ${NOTE_NAMES[pitch]}`);
+      // 度数ラベルは小さく、音名は据え置き(例「R A」= R小・A通常)
+      const t = document.createElementNS(NS, "text");
+      t.setAttribute("x", CENTER);
+      t.setAttribute("y", y);
+      t.setAttribute("class", "tension-label");
+      t.setAttribute("fill", textColor(on));
+      const deg = document.createElementNS(NS, "tspan");
+      deg.setAttribute("font-size", "8");
+      deg.textContent = label;
+      const nn = document.createElementNS(NS, "tspan");
+      nn.setAttribute("font-size", "11");
+      nn.textContent = " " + NOTE_NAMES[pitch];
+      t.appendChild(deg);
+      t.appendChild(nn);
+      g.appendChild(t);
     });
   }
 }
