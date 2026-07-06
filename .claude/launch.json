@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "D:\\quartal-loom\\target\\release\\dev-server.exe",
+      "runtimeArgs": ["D:\\quartal-loom\\web", "8080"],
+      "port": 8080
+    }
+  ]
+}

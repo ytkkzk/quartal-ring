@@ -1,6 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["crates/core"]
+members = ["crates/core", "crates/wasm", "tools/dev-server"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+panic = "abort"
+strip = true
 
 [workspace.package]
 edition = "2021"

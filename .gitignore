@@ -6,6 +6,7 @@ Cargo.lock
 # WASM / web (M3以降)
 /web/node_modules
 /web/dist
+/web/*.wasm
 pkg/
 
 # OS / editor

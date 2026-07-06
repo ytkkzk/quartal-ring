@@ -55,6 +55,11 @@ impl IntervalMask {
         IntervalMask(bits)
     }
 
+    /// 12bit の生ビットから構成(上位ビットは無視)。
+    pub const fn from_bits(bits: u16) -> Self {
+        IntervalMask(bits & 0x0FFF)
+    }
+
     /// 生ビット。
     pub const fn bits(self) -> u16 {
         self.0
