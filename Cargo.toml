@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = ["crates/core"]
+
+[workspace.package]
+edition = "2021"
+license = "CC-BY-4.0"
+authors = ["Yutaka Kouzaki"]

@@ -1,0 +1,15 @@
+# Rust
+/target
+**/target
+Cargo.lock
+
+# WASM / web (M3以降)
+/web/node_modules
+/web/dist
+pkg/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

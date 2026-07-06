@@ -1,0 +1,12 @@
+[package]
+name = "quartal-loom-core"
+version = "0.1.0"
+description = "Pure music-theory engine for Quartal Loom (pitch classes, scales, transposition). no_std, integer-only."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+name = "quartal_loom_core"
+
+[dependencies]
