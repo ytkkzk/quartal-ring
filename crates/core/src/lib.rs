@@ -143,6 +143,118 @@ pub mod modes {
     pub const LOCRIAN: IntervalMask = IntervalMask::from_intervals(&[0, 1, 3, 5, 6, 8, 10]);
 }
 
+/// 完全5度 = 7 半音。テンション堆積の基礎音程。
+pub const PERFECT_FIFTH: u8 = 7;
+
+/// start から完全5度を積み上げるイテレータ(start 自身を含む)。
+pub fn stack_fifths(start: PitchClass, count: usize) -> FifthStack {
+    FifthStack { current: start, remaining: count }
+}
+
+/// [`stack_fifths`] のイテレータ。
+#[derive(Debug, Clone)]
+pub struct FifthStack {
+    current: PitchClass,
+    remaining: usize,
+}
+
+impl Iterator for FifthStack {
+    type Item = PitchClass;
+    fn next(&mut self) -> Option<PitchClass> {
+        if self.remaining == 0 {
+            return None;
+        }
+        let out = self.current;
+        self.current = self.current.transpose(PERFECT_FIFTH as i32);
+        self.remaining -= 1;
+        Some(out)
+    }
+}
+
+/// テンション堆積: コードの質(メジャー/マイナー)。3度から上が質を決める。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Quality {
+    Major,
+    Minor,
+}
+
+/// テンション音の出所。共通 root 堆積か、質を決める 3度堆積か。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TensionSource {
+    /// major/minor 共通の root からの5度堆積(R, P5, 9, 13)。
+    CommonRoot,
+    /// 質を決める 3度からの5度堆積(M3系 or m3系)。
+    QualityThird,
+}
+
+/// 1 つのテンション音。表示アダプタはこれを描画・明暗判定に使う。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TensionTone {
+    pub pitch: PitchClass,
+    /// ルートからの半音距離(0..=11)。
+    pub interval: u8,
+    /// 度数ラベル(表示用)。例 "R", "M3", "#11", "13"。
+    pub label: &'static str,
+    pub source: TensionSource,
+}
+
+impl TensionTone {
+    /// 指定スケールでオンスケールか(明るさ判定用)。
+    pub const fn on_scale(&self, scale: &Scale) -> bool {
+        scale.contains(self.pitch)
+    }
+}
+
+// テンション表は 5度堆積から導かれる(tension_tests で堆積との一致を検証)。
+// 表示順は tertian(R,3,5,7,9,11,13)。共通=CommonRoot / 質=QualityThird。
+use TensionSource::{CommonRoot as CR, QualityThird as QT};
+
+const MAJOR_TABLE: [(u8, &str, TensionSource); 7] = [
+    (0, "R", CR),
+    (4, "M3", QT),
+    (7, "P5", CR),
+    (11, "M7", QT),
+    (2, "9", CR),
+    (6, "#11", QT),
+    (9, "13", CR),
+];
+
+const MINOR_TABLE: [(u8, &str, TensionSource); 7] = [
+    (0, "R", CR),
+    (3, "m3", QT),
+    (7, "P5", CR),
+    (10, "m7", QT),
+    (2, "9", CR),
+    (5, "11", QT),
+    (9, "13", CR),
+];
+
+/// root と質から 7 音のテンション集合を導く。tertian 順(R,3,5,7,9,11,13)。
+pub fn tensions(root: PitchClass, quality: Quality) -> [TensionTone; 7] {
+    let table = match quality {
+        Quality::Major => &MAJOR_TABLE,
+        Quality::Minor => &MINOR_TABLE,
+    };
+    let mut out = [TensionTone {
+        pitch: root,
+        interval: 0,
+        label: "R",
+        source: CR,
+    }; 7];
+    let mut i = 0;
+    while i < 7 {
+        let (iv, label, source) = table[i];
+        out[i] = TensionTone {
+            pitch: root.transpose(iv as i32),
+            interval: iv,
+            label,
+            source,
+        };
+        i += 1;
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -234,5 +346,98 @@ mod tests {
             arr
         };
         assert_eq!(collected, [0, 2, 4, 5, 7, 9, 11]);
+    }
+}
+
+#[cfg(test)]
+mod tension_tests {
+    use super::*;
+
+    const A: PitchClass = PitchClass::new(9);
+
+    fn pitch_set(tones: &[TensionTone]) -> u16 {
+        let mut bits = 0u16;
+        for t in tones {
+            bits |= 1 << t.pitch.value();
+        }
+        bits
+    }
+
+    #[test]
+    fn major_stack_matches_users_note_list() {
+        // 本人提示: メジャー堆積 A = A C# E G# B D# F#
+        let tones = tensions(A, Quality::Major);
+        // C=0..B=11 で {A,C#,E,G#,B,D#,F#} = {9,1,4,8,11,3,6}
+        let expected = (1u16 << 9) | (1 << 1) | (1 << 4) | (1 << 8) | (1 << 11) | (1 << 3) | (1 << 6);
+        assert_eq!(pitch_set(&tones), expected);
+    }
+
+    #[test]
+    fn minor_stack_matches_users_note_list() {
+        // 本人提示: マイナー堆積 A = A C E G B D F#
+        let tones = tensions(A, Quality::Minor);
+        // {A,C,E,G,B,D,F#} = {9,0,4,7,11,2,6}
+        let expected = (1u16 << 9) | (1 << 0) | (1 << 4) | (1 << 7) | (1 << 11) | (1 << 2) | (1 << 6);
+        assert_eq!(pitch_set(&tones), expected);
+    }
+
+    #[test]
+    fn major_stack_equals_lydian_minor_equals_dorian() {
+        // 5度堆積は avoid を自動回避し、メジャー=リディアン / マイナー=ドリアン を生む。
+        let a_lydian = Scale::new(A, modes::LYDIAN);
+        let a_dorian = Scale::new(A, modes::DORIAN);
+        for t in tensions(A, Quality::Major) {
+            assert!(a_lydian.contains(t.pitch), "{} not in A Lydian", t.label);
+        }
+        for t in tensions(A, Quality::Minor) {
+            assert!(a_dorian.contains(t.pitch), "{} not in A Dorian", t.label);
+        }
+    }
+
+    fn stack_mask(start: PitchClass, count: usize) -> u16 {
+        let mut bits = 0u16;
+        for p in stack_fifths(start, count) {
+            bits |= 1 << p.value();
+        }
+        bits
+    }
+
+    #[test]
+    fn derivation_matches_fifth_stacking() {
+        // 表(MAJOR/MINOR_TABLE)が本当に「共通root堆積(4音) + 3度堆積(3音)」の5度積みと一致するか。
+        let root_stack = stack_mask(A, 4); // R,P5,9,13
+        let major_third = stack_mask(A.transpose(4), 3); // M3,M7,#11
+        let minor_third = stack_mask(A.transpose(3), 3); // m3,m7,11
+        assert_eq!(pitch_set(&tensions(A, Quality::Major)), root_stack | major_third);
+        assert_eq!(pitch_set(&tensions(A, Quality::Minor)), root_stack | minor_third);
+    }
+
+    #[test]
+    fn on_scale_dims_out_of_scale_tensions() {
+        // 表示スケール=A エオリアン(A B C D E F G)のままメジャー堆積 →
+        // M3(C#)・M7(G#)・#11(D#)・13(F#) がアウト(暗く出る)。オンは R・P5・9 のみ。
+        let a_aeolian = Scale::new(A, modes::AEOLIAN);
+        for t in tensions(A, Quality::Major) {
+            let on = t.on_scale(&a_aeolian);
+            match t.label {
+                "R" | "P5" | "9" => assert!(on, "{} should be on in A aeolian", t.label),
+                "M3" | "M7" | "#11" | "13" => assert!(!on, "{} should be out in A aeolian", t.label),
+                other => panic!("unexpected label {other}"),
+            }
+        }
+    }
+
+    #[test]
+    fn source_splits_common_and_quality() {
+        // 共通4音(R,P5,9,13) は CommonRoot、質を決める3音は QualityThird。
+        let tones = tensions(A, Quality::Major);
+        let common: [&str; 4] = ["R", "P5", "9", "13"];
+        for t in tones {
+            let is_common = common.contains(&t.label);
+            match t.source {
+                TensionSource::CommonRoot => assert!(is_common, "{} misclassified", t.label),
+                TensionSource::QualityThird => assert!(!is_common, "{} misclassified", t.label),
+            }
+        }
     }
 }
