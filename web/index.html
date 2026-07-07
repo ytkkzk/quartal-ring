@@ -13,14 +13,16 @@
   body {
     margin: 0; background: #000; color: #eee;
     font-family: "Cardo", Georgia, serif;
-    height: 100vh; overflow: hidden;
-    display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px;
+    height: 100vh; overflow: hidden; position: relative;
+    display: flex; align-items: center; justify-content: center;
   }
-  h1 { font-weight: 400; letter-spacing: .15em; margin: 2px 0; font-size: 20px; }
-  .controls { display: flex; gap: 30px; align-items: flex-end; justify-content: center; }
+  /* タイトル+スイッチは左上に縦積みでオーバーレイ(中央=円盤を邪魔しない) */
+  .panel { position: absolute; top: 16px; left: 22px; z-index: 2; display: flex; flex-direction: column; gap: 18px; }
+  h1 { font-weight: 400; letter-spacing: .1em; margin: 0; font-size: 40px; text-align: left; }
+  .controls { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
   .controls label { display: flex; flex-direction: column; font-size: 18px; color: #aaa; gap: 6px; }
-  /* コントロール(約70px)とフッタ(約24px)を除いた領域に、縦横比を保って最大内接 */
-  #wheel { flex: 1 1 auto; min-height: 0; width: min(98vw, calc(100vh - 120px)); aspect-ratio: 1 / 1; height: auto; }
+  /* 円盤は縦横比を保ってビューポートいっぱいに内接 */
+  #wheel { width: min(98vw, 98vh); aspect-ratio: 1 / 1; height: auto; }
   .note-label, .tension-label, .scale-item {
     font-family: "Cardo", Georgia, serif; text-anchor: middle; dominant-baseline: middle;
   }
@@ -32,26 +34,28 @@
     font-family: "Cardo", Georgia, serif;
   }
   .toggle button.active { background: #5a1717; color: #fff; }
-  footer { color: #555; font-size: 11px; }
+  footer { position: absolute; bottom: 8px; left: 0; right: 0; text-align: center; color: #555; font-size: 11px; }
 </style>
 </head>
 <body>
-  <h1>QUARTAL&nbsp;LOOM</h1>
-  <div class="controls">
-    <label>Harmony Mode
-      <div class="toggle" id="root">
-        <button data-root="off">off</button>
-        <button data-root="p4">4th</button>
-        <button data-root="p5" class="active">5th</button>
-      </div>
-    </label>
-    <label>3rd
-      <div class="toggle" id="third">
-        <button data-third="off">off</button>
-        <button data-third="M3">M3</button>
-        <button data-third="m3" class="active">m3</button>
-      </div>
-    </label>
+  <div class="panel">
+    <h1>QUARTAL&nbsp;LOOM</h1>
+    <div class="controls">
+      <label>Stack Interval
+        <div class="toggle" id="root">
+          <button data-root="off">off</button>
+          <button data-root="p4">4th</button>
+          <button data-root="p5" class="active">5th</button>
+        </div>
+      </label>
+      <label>3rd
+        <div class="toggle" id="third">
+          <button data-third="off">off</button>
+          <button data-third="M3">M3</button>
+          <button data-third="m3" class="active">m3</button>
+        </div>
+      </label>
+    </div>
   </div>
   <svg id="wheel" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg"></svg>
   <footer>セクタをクリック=そのルートへ回転 ・ 中央=スケール選択 ・ 有彩(マルーン)=オンスケール / 無彩=アウト ・ 明暗=TSDロール群</footer>
