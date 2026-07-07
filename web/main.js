@@ -12,7 +12,8 @@ const DEGREE_LABEL = {
 const DEGREE_RANK = { 0: 0, 3: 1, 4: 1, 7: 2, 10: 4, 11: 4, 1: 8, 2: 8, 5: 10, 6: 10, 8: 12, 9: 12 };
 
 const HUE = 0; // マルーン(#600000 ≒ hue 0)
-function fillHSL(slot) { return { h: 0, s: 0, l: [7, 14, 27][slot % 3] }; } // TSDロール群の明度
+// TSDロール群の明度。5thは堆積の向きが逆なのでバンドも反転(3n時は不変・n+1とn+2を入替)。
+function fillHSL(slot, mode) { const b = mode === "p5" ? (3 - slot % 3) % 3 : slot % 3; return { h: 0, s: 0, l: [7, 14, 27][b] }; }
 function textHSL(on) { return on ? { h: HUE, s: 82, l: 46 } : { h: 0, s: 0, l: 38 }; } // 有彩=オン/無彩=アウト
 
 function lerp(a, b, t) { return a + (b - a) * t; }
@@ -126,7 +127,7 @@ function renderFrame(e, prev, next) {
     const slotPrev = musicalSlot(pitch, prev.home, prev.circleMode);
     const slotNext = musicalSlot(pitch, next.home, next.circleMode);
     const angle = slotPrev * 30 + normAngle(slotNext * 30 - slotPrev * 30) * e;
-    const fill = mix(fillHSL(slotPrev), fillHSL(slotNext), e);
+    const fill = mix(fillHSL(slotPrev, prev.circleMode), fillHSL(slotNext, next.circleMode), e);
     const letterCol = mix(textHSL((onPrev >> pitch) & 1), textHSL((onNext >> pitch) & 1), e);
 
     const secG = document.createElementNS(NS, "g");
