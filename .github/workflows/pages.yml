@@ -1,0 +1,33 @@
+name: Deploy to GitHub Pages
+
+# web/ 配下の静的サイト(index.html + main.js + wasm)をそのまま Pages へ配信する。
+# ビルド済み wasm はリポジトリに含めているため、ここでは Rust ビルドは行わない。
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時デプロイは1本に集約(古い実行はキャンセルしない=公開の取りこぼしを防ぐ)
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4
