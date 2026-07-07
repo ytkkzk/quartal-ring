@@ -30,13 +30,22 @@ let wasm;
 let cur = { home: 9, scaleId: 5, rootMode: "p5", thirdMode: "M3" };
 let animating = false;
 
-// 堆積の構成: Root(off/4度/5度) と 3rd(off/M3/m3) から度数リストを組む。
-// 3rd の堆積インターバルは Root スイッチ(4度=5半音/5度=7半音)を参照。Root=off なら堆積せず素の音のみ。
+// 堆積の構成。
+// - 4th: 純クォータル7音(R + 完全4度×6)。ラベル R,q4,q7,q10,q13,q16,q19。3rd は必ず off。
+// - 5th: R堆積(R,5,9,13) ＋ 3rd堆積(M3/m3 から5度で3音)。tertian 順。
+// - off: R のみ。3rd 選択時は R＋3度の2音(3度自身のみ)。
 function buildStack(rootMode, thirdMode) {
-  const step = rootMode === "p4" ? 5 : rootMode === "p5" ? 7 : null;
+  if (rootMode === "p4") {
+    const out = [];
+    for (let i = 0; i < 7; i++) {
+      out.push({ label: i === 0 ? "R" : "q" + (1 + 3 * i), interval: (i * 5) % 12 });
+    }
+    return out; // 積み順のまま(tertian sort しない)
+  }
+  const step = 7; // 5th
   const ivs = [];
   if (rootMode === "off") ivs.push(0);
-  else for (let k = 0; k < 4; k++) ivs.push((k * step) % 12); // R,+step,+2step,+3step
+  else for (let k = 0; k < 4; k++) ivs.push((k * step) % 12);
   if (thirdMode !== "off") {
     const base = thirdMode === "M3" ? 4 : 3;
     if (rootMode === "off") ivs.push(base);           // Root off → 3rd 自身のみ(RとM3/m3の2音)
@@ -55,17 +64,32 @@ async function init() {
 
   bindToggle("root", "rootMode");
   bindToggle("third", "thirdMode");
+  syncToggles();
   renderFrame(1, cur, cur, 0);
 }
 
 function bindToggle(id, field) {
-  const el = document.getElementById(id);
-  el.addEventListener("click", (e) => {
+  document.getElementById(id).addEventListener("click", (e) => {
     const btn = e.target.closest("button");
-    if (!btn || animating) return;
-    const val = btn.dataset[id];
-    [...el.children].forEach((b) => b.classList.toggle("active", b === btn));
-    setState({ ...cur, [field]: val });
+    if (!btn || btn.disabled || animating) return;
+    const next = { ...cur, [field]: btn.dataset[id] };
+    if (field === "rootMode" && btn.dataset[id] === "p4") next.thirdMode = "off"; // 4thは3rd強制off
+    setState(next);
+  });
+}
+
+// トグルの active/無効状態を cur から同期。4thモードでは3rd(M3/m3)を無効化。
+function syncToggles() {
+  for (const [id, field] of [["root", "rootMode"], ["third", "thirdMode"]]) {
+    const el = document.getElementById(id);
+    [...el.children].forEach((b) => b.classList.toggle("active", b.dataset[id] === cur[field]));
+  }
+  const q4 = cur.rootMode === "p4";
+  document.querySelectorAll('#third button').forEach((b) => {
+    const dis = q4 && b.dataset.third !== "off";
+    b.disabled = dis;
+    b.style.opacity = dis ? "0.3" : "";
+    b.style.cursor = dis ? "not-allowed" : "";
   });
 }
 
@@ -181,6 +205,7 @@ function setState(next) {
   if (animating) return;
   const prev = cur;
   cur = next;
+  syncToggles();
   const offset0 = normAngle(-musicalSlot(prev.home, next.home) * 30);
   const dur = prev.home !== next.home ? 460 : 280;
   const t0 = performance.now();
