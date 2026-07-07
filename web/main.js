@@ -27,7 +27,7 @@ const NS = "http://www.w3.org/2000/svg";
 
 let wasm;
 // state: home, scaleId, rootMode('off'|'p4'|'p5'), thirdMode('off'|'M3'|'m3')
-let cur = { home: 9, scaleId: 5, rootMode: "p5", thirdMode: "M3" };
+let cur = { home: 9, scaleId: 5, rootMode: "p5", thirdMode: "m3" };
 let animating = false;
 
 // 堆積の構成。
