@@ -17,7 +17,7 @@ function textHSL(on) { return on ? { h: HUE, s: 82, l: 46 } : { h: 0, s: 0, l: 3
 
 function lerp(a, b, t) { return a + (b - a) * t; }
 function mix(c1, c2, t) { return `hsl(${lerp(c1.h, c2.h, t)} ${lerp(c1.s, c2.s, t)}% ${lerp(c1.l, c2.l, t)}%)`; }
-function musicalSlot(pitch, home) { return (((pitch - home) * FOURTH) % 12 + 12) % 12; }
+function musicalSlot(pitch, home, mode) { const f = mode === "p5" ? 7 : FOURTH; return (((pitch - home) * f) % 12 + 12) % 12; }
 function normAngle(d) { return ((d + 180) % 360 + 360) % 360 - 180; }
 function ease(p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; } // easeInOutCubic
 
@@ -27,7 +27,7 @@ const NS = "http://www.w3.org/2000/svg";
 
 let wasm;
 // state: home, scaleId, rootMode('off'|'p4'|'p5'), thirdMode('off'|'M3'|'m3')
-let cur = { home: 9, scaleId: 5, rootMode: "p5", thirdMode: "m3" };
+let cur = { home: 9, scaleId: 5, rootMode: "p5", thirdMode: "m3", circleMode: "p4" };
 let animating = false;
 
 // 堆積の構成。
@@ -64,8 +64,9 @@ async function init() {
 
   bindToggle("root", "rootMode");
   bindToggle("third", "thirdMode");
+  bindToggle("circle", "circleMode");
   syncToggles();
-  renderFrame(1, cur, cur, 0);
+  renderFrame(1, cur, cur);
 }
 
 function bindToggle(id, field) {
@@ -80,7 +81,7 @@ function bindToggle(id, field) {
 
 // トグルの active/無効状態を cur から同期。4thモードでは3rd(M3/m3)を無効化。
 function syncToggles() {
-  for (const [id, field] of [["root", "rootMode"], ["third", "thirdMode"]]) {
+  for (const [id, field] of [["root", "rootMode"], ["third", "thirdMode"], ["circle", "circleMode"]]) {
     const el = document.getElementById(id);
     [...el.children].forEach((b) => b.classList.toggle("active", b.dataset[id] === cur[field]));
   }
@@ -111,10 +112,9 @@ function letterFont(angleDeg) {
 }
 function onMask(st) { return wasm.scale_pitch_mask(st.home, wasm.builtin_scale(st.scaleId)); }
 
-// prev→next を e(0..1)で補間して1フレーム描画。offset0=開始時の回転オフセット(度)。
-function renderFrame(e, prev, next, offset0) {
+// prev→next を e(0..1)で補間して1フレーム描画。各音の角度は最短弧で補間。
+function renderFrame(e, prev, next) {
   const onPrev = onMask(prev), onNext = onMask(next);
-  const offset = offset0 * (1 - e);
   const sameStack = prev.rootMode === next.rootMode && prev.thirdMode === next.thirdMode;
   const stackNext = buildStack(next.rootMode, next.thirdMode);
   const stackPrev = buildStack(prev.rootMode, prev.thirdMode);
@@ -123,8 +123,10 @@ function renderFrame(e, prev, next, offset0) {
   svg.innerHTML = "";
 
   for (let pitch = 0; pitch < 12; pitch++) {
-    const angle = musicalSlot(pitch, next.home) * 30 + offset;
-    const fill = mix(fillHSL(musicalSlot(pitch, prev.home)), fillHSL(musicalSlot(pitch, next.home)), e);
+    const slotPrev = musicalSlot(pitch, prev.home, prev.circleMode);
+    const slotNext = musicalSlot(pitch, next.home, next.circleMode);
+    const angle = slotPrev * 30 + normAngle(slotNext * 30 - slotPrev * 30) * e;
+    const fill = mix(fillHSL(slotPrev), fillHSL(slotNext), e);
     const letterCol = mix(textHSL((onPrev >> pitch) & 1), textHSL((onNext >> pitch) & 1), e);
 
     const secG = document.createElementNS(NS, "g");
@@ -206,15 +208,15 @@ function setState(next) {
   const prev = cur;
   cur = next;
   syncToggles();
-  const offset0 = normAngle(-musicalSlot(prev.home, next.home) * 30);
-  const dur = prev.home !== next.home ? 460 : 280;
+  const moved = prev.home !== next.home || prev.circleMode !== next.circleMode;
+  const dur = moved ? 460 : 280;
   const t0 = performance.now();
   animating = true;
   function frame(now) {
     const p = Math.min(1, (now - t0) / dur);
-    renderFrame(ease(p), prev, next, offset0);
+    renderFrame(ease(p), prev, next);
     if (p < 1) requestAnimationFrame(frame);
-    else { animating = false; renderFrame(1, next, next, 0); }
+    else { animating = false; renderFrame(1, next, next); }
   }
   requestAnimationFrame(frame);
 }
