@@ -1,7 +1,7 @@
 [package]
-name = "quartal-loom-wasm"
+name = "quartal-ring-wasm"
 version = "0.1.0"
-description = "Raw integer-ABI wasm adapter over quartal-loom-core (no wasm-bindgen)."
+description = "Raw integer-ABI wasm adapter over quartal-ring-core (no wasm-bindgen)."
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -10,4 +10,4 @@ authors.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-quartal-loom-core = { path = "../core" }
+quartal-ring-core = { path = "../core" }

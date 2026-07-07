@@ -1,11 +1,11 @@
-//! Quartal Loom — 生の整数 ABI wasm アダプタ。
+//! Quartal Ring — 生の整数 ABI wasm アダプタ。
 //!
 //! wasm-bindgen を使わず、整数 in/整数 out だけで core を橋渡しする(コアが整数モデルゆえ成立)。
 //! JS 側は `WebAssembly.instantiateStreaming` で読み、これらの関数を直接呼ぶ。
 //! ビット表現: 12bit マスク。bit p (0..12) = ピッチクラス p、または度数 p。
 #![no_std]
 
-use quartal_loom_core::{modes, IntervalMask, PitchClass, Quality, Scale};
+use quartal_ring_core::{modes, IntervalMask, PitchClass, Quality, Scale};
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -59,7 +59,7 @@ pub extern "C" fn scale_pitch_mask(root: u32, interval_mask: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn tension_pitch_mask(root: u32, quality: u32) -> u32 {
     let q = if quality == 1 { Quality::Minor } else { Quality::Major };
-    let tones = quartal_loom_core::tensions(PitchClass::new(root as i32), q);
+    let tones = quartal_ring_core::tensions(PitchClass::new(root as i32), q);
     let mut out: u32 = 0;
     for t in tones {
         out |= 1 << t.pitch.value();

@@ -1,5 +1,5 @@
 [package]
-name = "quartal-loom-dev-server"
+name = "quartal-ring-dev-server"
 version = "0.1.0"
 description = "Dev-only static file server for the web preview (std only, no deps). Not part of the shipped product."
 edition.workspace = true

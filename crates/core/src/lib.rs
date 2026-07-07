@@ -1,4 +1,4 @@
-//! Quartal Loom — pure music-theory core.
+//! Quartal Ring — pure music-theory core.
 //!
 //! 設計原則(CLAUDE.md): このクレートは純関数の島。I/O・描画・浮動小数点・動的確保を持たない。
 //! 音は 12 を法とした整数(ピッチクラス)、スケールは 12bit マスク、転調は加算 mod 12。

@@ -1,4 +1,4 @@
-// Quartal Loom — Web 表示アダプタ。
+// Quartal Ring — Web 表示アダプタ。
 // 理論(音の集合)は wasm(core)、ここは 4度圏 SVG への描画と操作・アニメだけ(ヘキサゴナル)。
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
@@ -58,7 +58,7 @@ function buildStack(rootMode, thirdMode) {
 }
 
 async function init() {
-  const resp = await fetch("quartal_loom_wasm.wasm");
+  const resp = await fetch("quartal_ring_wasm.wasm");
   const { instance } = await WebAssembly.instantiateStreaming(resp, {});
   wasm = instance.exports;
 

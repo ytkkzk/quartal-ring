@@ -1,4 +1,4 @@
-# Quartal Loom — 開発リポジトリの規定
+# Quartal Ring — 開発リポジトリの規定
 
 > このリポジトリは **独立root**（自前Git・自前CLAUDE.md）。計画・記録のハブは
 > Dorothy 側 `D:\Dorothy\work\music\theory-circle-app\_epic.md`。仕様・進捗の正本はそちら、

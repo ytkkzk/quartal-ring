@@ -8,7 +8,7 @@ Cargo.lock
 /web/dist
 /web/*.wasm
 # ただしデプロイ成果物である本体wasmは配信のため追跡する(GitHub Pages)
-!/web/quartal_loom_wasm.wasm
+!/web/quartal_ring_wasm.wasm
 pkg/
 
 # OS / editor

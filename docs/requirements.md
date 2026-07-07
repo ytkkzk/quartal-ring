@@ -1,4 +1,4 @@
-# Quartal Loom — 要件定義
+# Quartal Ring — 要件定義
 
 > 正本。計画ハブ(Dorothy `work/music/theory-circle-app/_epic.md`)からリンクされる。
 > ここは「何を作るか」の SSOT。実装の詳細判断はコード＋テストが正本。
