@@ -4,10 +4,6 @@
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const SCALE_NAMES = ["Ionian", "Dorian", "Phrygian", "Lydian", "Mixolydian", "Aeolian", "Locrian"];
 const SCALE_ORDER = [3, 0, 4, 1, 5, 2, 6]; // 明→暗: Lydian,Ionian,Mixolydian,Dorian,Aeolian,Phrygian,Locrian
-// ルートからの半音 → 度数ラベル(全12)。
-const DEGREE_LABEL = {
-  0: "R", 1: "♭9", 2: "9", 3: "m3", 4: "M3", 5: "11", 6: "#11", 7: "P5", 8: "♭13", 9: "13", 10: "m7", 11: "M7",
-};
 // 度数の tertian 並び順(R,3,5,7,9,11,13)。sort 用の rank。
 const DEGREE_RANK = { 0: 0, 3: 1, 4: 1, 7: 2, 10: 4, 11: 4, 1: 8, 2: 8, 5: 10, 6: 10, 8: 12, 9: 12 };
 
@@ -27,35 +23,37 @@ const R_LETTER = R_OUTER - 22, R_LIST_TOP = R_OUTER - 52, R_LIST_BOT = R_INNER +
 const NS = "http://www.w3.org/2000/svg";
 
 let wasm;
-// state: home, scaleId, rootMode('off'|'p4'|'p5'), thirdMode('off'|'M3'|'m3')
-let cur = { home: 9, scaleId: 5, rootMode: "p5", thirdMode: "m3", circleMode: "p4" };
+// state: home, scaleId, rootMode('p4'|'p5')
+let cur = { home: 9, scaleId: 5, rootMode: "p5", circleMode: "p4" };
 let animating = false;
 
-// 堆積の構成。
-// - 4th: 純クォータル7音(R + 完全4度×6)。ラベル R,q4,q7,q10,q13,q16,q19。3rd は必ず off。
-// - 5th: R堆積(R,5,9,13) ＋ 3rd堆積(M3/m3 から5度で3音)。tertian 順。
-// - off: R のみ。3rd 選択時は R＋3度の2音(3度自身のみ)。
-function buildStack(rootMode, thirdMode) {
+const ROOT_LABEL = { 0: "R", 7: "P5", 2: "9", 9: "13" };
+// 3rd系(3rd/7th/11th)の m3由来/M3由来 ペア。同一スケールでの併記用。
+const THIRD_PAIRS = [
+  { label: "3", m: 3, M: 4 },
+  { label: "7", m: 10, M: 11 },
+  { label: "11", m: 5, M: 6 },
+];
+
+// 堆積の構成。各行 = { label, entries:[{interval, prefix?}] }(entriesが2件=m/M併記行)。
+// - 4th: 純クォータル7音(R + 完全4度×6)。ラベル R,q4,q7,q10,q13,q16,q19。3rd相当なし。
+// - 5th: R堆積(R,5,9,13) ＋ 3rd/7th/11thにm3由来/M3由来を常時ペア併記。
+function buildStack(rootMode) {
   if (rootMode === "p4") {
     const out = [];
     for (let i = 0; i < 7; i++) {
-      out.push({ label: i === 0 ? "R" : "q" + (1 + 3 * i), interval: (i * 5) % 12 });
+      out.push({ label: i === 0 ? "R" : "q" + (1 + 3 * i), entries: [{ interval: (i * 5) % 12 }] });
     }
     return out; // 積み順のまま(tertian sort しない)
   }
   const step = 7; // 5th
-  const ivs = [];
-  if (rootMode === "off") ivs.push(0);
-  else for (let k = 0; k < 4; k++) ivs.push((k * step) % 12);
-  if (thirdMode !== "off") {
-    const base = thirdMode === "M3" ? 4 : 3;
-    if (rootMode === "off") ivs.push(base);           // Root off → 3rd 自身のみ(RとM3/m3の2音)
-    else for (let k = 0; k < 3; k++) ivs.push((base + k * step) % 12);
+  const rootIntervals = [0, 1, 2, 3].map((k) => (k * step) % 12);
+  const rows = rootIntervals.map((iv) => ({ label: ROOT_LABEL[iv], rank: DEGREE_RANK[iv], entries: [{ interval: iv }] }));
+  for (const p of THIRD_PAIRS) {
+    rows.push({ label: p.label, rank: DEGREE_RANK[p.m], entries: [{ interval: p.m, prefix: "m" }, { interval: p.M, prefix: "M" }] });
   }
-  const seen = new Set();
-  const uniq = ivs.filter((iv) => (seen.has(iv) ? false : seen.add(iv)));
-  uniq.sort((a, b) => (DEGREE_RANK[a] - DEGREE_RANK[b]) || (a - b));
-  return uniq.map((iv) => ({ label: DEGREE_LABEL[iv], interval: iv }));
+  rows.sort((a, b) => a.rank - b.rank);
+  return rows;
 }
 
 async function init() {
@@ -64,7 +62,6 @@ async function init() {
   wasm = instance.exports;
 
   bindToggle("root", "rootMode");
-  bindToggle("third", "thirdMode");
   bindToggle("circle", "circleMode");
   syncToggles();
   renderFrame(1, cur, cur);
@@ -74,25 +71,16 @@ function bindToggle(id, field) {
   document.getElementById(id).addEventListener("click", (e) => {
     const btn = e.target.closest("button");
     if (!btn || btn.disabled || animating) return;
-    const next = { ...cur, [field]: btn.dataset[id] };
-    if (field === "rootMode" && btn.dataset[id] === "p4") next.thirdMode = "off"; // 4thは3rd強制off
-    setState(next);
+    setState({ ...cur, [field]: btn.dataset[id] });
   });
 }
 
-// トグルの active/無効状態を cur から同期。4thモードでは3rd(M3/m3)を無効化。
+// トグルの active 状態を cur から同期。
 function syncToggles() {
-  for (const [id, field] of [["root", "rootMode"], ["third", "thirdMode"], ["circle", "circleMode"]]) {
+  for (const [id, field] of [["root", "rootMode"], ["circle", "circleMode"]]) {
     const el = document.getElementById(id);
     [...el.children].forEach((b) => b.classList.toggle("active", b.dataset[id] === cur[field]));
   }
-  const q4 = cur.rootMode === "p4";
-  document.querySelectorAll('#third button').forEach((b) => {
-    const dis = q4 && b.dataset.third !== "off";
-    b.disabled = dis;
-    b.style.opacity = dis ? "0.3" : "";
-    b.style.cursor = dis ? "not-allowed" : "";
-  });
 }
 
 function polar(angleDeg, r) {
@@ -116,9 +104,9 @@ function onMask(st) { return wasm.scale_pitch_mask(st.home, wasm.builtin_scale(s
 // prev→next を e(0..1)で補間して1フレーム描画。各音の角度は最短弧で補間。
 function renderFrame(e, prev, next) {
   const onPrev = onMask(prev), onNext = onMask(next);
-  const sameStack = prev.rootMode === next.rootMode && prev.thirdMode === next.thirdMode;
-  const stackNext = buildStack(next.rootMode, next.thirdMode);
-  const stackPrev = buildStack(prev.rootMode, prev.thirdMode);
+  const sameStack = prev.rootMode === next.rootMode;
+  const stackNext = buildStack(next.rootMode);
+  const stackPrev = buildStack(prev.rootMode);
 
   const svg = document.getElementById("wheel");
   svg.innerHTML = "";
@@ -162,19 +150,25 @@ function drawStack(g, stack, root, opacity, colorFor) {
   if (opacity <= 0.01) return;
   const L = stack.length;
   const stepR = L > 1 ? (R_LIST_TOP - R_LIST_BOT) / (L - 1) : 0;
-  stack.forEach(({ label, interval }, i) => {
-    const pitch = (root + interval) % 12;
+  stack.forEach(({ label, entries }, i) => {
     const y = CENTER - (R_LIST_TOP - i * stepR);
     const t = document.createElementNS(NS, "text");
     t.setAttribute("x", CENTER); t.setAttribute("y", y);
     t.setAttribute("class", "tension-label");
-    t.setAttribute("fill", colorFor(pitch));
     if (opacity < 1) t.setAttribute("opacity", opacity.toFixed(3));
     const deg = document.createElementNS(NS, "tspan");
-    deg.setAttribute("font-size", "8"); deg.textContent = label;
-    const nn = document.createElementNS(NS, "tspan");
-    nn.setAttribute("font-size", "11"); nn.textContent = " " + NOTE_NAMES[pitch];
-    t.appendChild(deg); t.appendChild(nn);
+    deg.setAttribute("font-size", "8");
+    deg.setAttribute("fill", colorFor((root + entries[0].interval) % 12));
+    deg.textContent = label;
+    t.appendChild(deg);
+    entries.forEach(({ interval, prefix }) => {
+      const pitch = (root + interval) % 12;
+      const nn = document.createElementNS(NS, "tspan");
+      nn.setAttribute("font-size", "11");
+      nn.setAttribute("fill", colorFor(pitch));
+      nn.textContent = " " + (prefix || "") + NOTE_NAMES[pitch];
+      t.appendChild(nn);
+    });
     g.appendChild(t);
   });
 }
