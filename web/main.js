@@ -14,6 +14,7 @@ function textHSL(on) { return on ? { h: HUE, s: 82, l: 46 } : { h: 0, s: 0, l: 3
 
 function lerp(a, b, t) { return a + (b - a) * t; }
 function mix(c1, c2, t) { return `hsl(${lerp(c1.h, c2.h, t)} ${lerp(c1.s, c2.s, t)}% ${lerp(c1.l, c2.l, t)}%)`; }
+function hslStr(c) { return mix(c, c, 0); }
 function musicalSlot(pitch, home, mode) { const f = mode === "p5" ? 7 : FOURTH; return (((pitch - home) * f) % 12 + 12) % 12; }
 function normAngle(d) { return ((d + 180) % 360 + 360) % 360 - 180; }
 function ease(p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; } // easeInOutCubic
@@ -27,15 +28,15 @@ let wasm;
 let cur = { home: 9, scaleId: 5, rootMode: "p5", circleMode: "p4" };
 let animating = false;
 
-const ROOT_LABEL = { 0: "R", 7: "P5", 2: "9", 9: "13" };
-// 3rd系(3rd/7th/11th)の m3由来/M3由来 ペア。同一スケールでの併記用。
+const ROOT_LABEL = { 0: "R", 7: "5", 2: "9", 9: "13" };
+// 3rd系(3rd/7th/11th)の m3由来/M3由来 ペア。同一スケールでの併記用(左=m由来/右=M由来、Major/Minor等の質ラベルは出さない)。
 const THIRD_PAIRS = [
   { label: "3", m: 3, M: 4 },
   { label: "7", m: 10, M: 11 },
   { label: "11", m: 5, M: 6 },
 ];
 
-// 堆積の構成。各行 = { label, entries:[{interval, prefix?}] }(entriesが2件=m/M併記行)。
+// 堆積の構成。各行 = { label, entries:[{interval}] }(entriesが2件=左右に音名を併記する行)。
 // - 4th: 純クォータル7音(R + 完全4度×6)。ラベル R,q4,q7,q10,q13,q16,q19。3rd相当なし。
 // - 5th: R堆積(R,5,9,13) ＋ 3rd/7th/11thにm3由来/M3由来を常時ペア併記。
 function buildStack(rootMode) {
@@ -50,7 +51,7 @@ function buildStack(rootMode) {
   const rootIntervals = [0, 1, 2, 3].map((k) => (k * step) % 12);
   const rows = rootIntervals.map((iv) => ({ label: ROOT_LABEL[iv], rank: DEGREE_RANK[iv], entries: [{ interval: iv }] }));
   for (const p of THIRD_PAIRS) {
-    rows.push({ label: p.label, rank: DEGREE_RANK[p.m], entries: [{ interval: p.m, prefix: "m" }, { interval: p.M, prefix: "M" }] });
+    rows.push({ label: p.label, rank: DEGREE_RANK[p.m], entries: [{ interval: p.m }, { interval: p.M }] });
   }
   rows.sort((a, b) => a.rank - b.rank);
   return rows;
@@ -135,17 +136,21 @@ function renderFrame(e, prev, next) {
     g.setAttribute("transform", `rotate(${angle} ${CENTER} ${CENTER})`);
     secG.appendChild(g);
 
+    // pitches内どれか1音でもオンスケールなら点灯(両隣に音を持つ数字ラベルはOR判定、単独音はそのまま)。
+    const anyOn = (mask, pitches) => pitches.some((p) => (mask >> p) & 1);
     if (sameStack) {
-      drawStack(g, stackNext, pitch, 1, (tp) => mix(textHSL((onPrev >> tp) & 1), textHSL((onNext >> tp) & 1), e));
+      drawStack(g, stackNext, pitch, 1, (pitches) => mix(textHSL(anyOn(onPrev, pitches)), textHSL(anyOn(onNext, pitches)), e));
     } else {
       // 堆積構造が変わる: 旧をフェードアウト・新をフェードインで層を交差
-      drawStack(g, stackPrev, pitch, 1 - e, (tp) => mix(textHSL((onPrev >> tp) & 1), textHSL((onPrev >> tp) & 1), 0));
-      drawStack(g, stackNext, pitch, e, (tp) => mix(textHSL((onNext >> tp) & 1), textHSL((onNext >> tp) & 1), 0));
+      drawStack(g, stackPrev, pitch, 1 - e, (pitches) => hslStr(textHSL(anyOn(onPrev, pitches))));
+      drawStack(g, stackNext, pitch, e, (pitches) => hslStr(textHSL(anyOn(onNext, pitches))));
     }
   }
   drawScaleList(svg, prev, next, e);
 }
 
+// colorFor は pitches(1件=単独音／2件=左右併記行の両隣音)を受け取り、
+// いずれかがオンスケールなら点灯した色を返す。数字ラベルは音名より小さいfont-sizeで描く。
 function drawStack(g, stack, root, opacity, colorFor) {
   if (opacity <= 0.01) return;
   const L = stack.length;
@@ -156,19 +161,22 @@ function drawStack(g, stack, root, opacity, colorFor) {
     t.setAttribute("x", CENTER); t.setAttribute("y", y);
     t.setAttribute("class", "tension-label");
     if (opacity < 1) t.setAttribute("opacity", opacity.toFixed(3));
-    const deg = document.createElementNS(NS, "tspan");
-    deg.setAttribute("font-size", "8");
-    deg.setAttribute("fill", colorFor((root + entries[0].interval) % 12));
-    deg.textContent = label;
-    t.appendChild(deg);
-    entries.forEach(({ interval, prefix }) => {
-      const pitch = (root + interval) % 12;
-      const nn = document.createElementNS(NS, "tspan");
-      nn.setAttribute("font-size", "11");
-      nn.setAttribute("fill", colorFor(pitch));
-      nn.textContent = " " + (prefix || "") + NOTE_NAMES[pitch];
-      t.appendChild(nn);
-    });
+    const pitches = entries.map(({ interval }) => (root + interval) % 12);
+    const addTspan = (text, size, fill) => {
+      const s = document.createElementNS(NS, "tspan");
+      s.setAttribute("font-size", size);
+      s.setAttribute("fill", fill);
+      s.textContent = text;
+      t.appendChild(s);
+    };
+    if (pitches.length === 2) {
+      addTspan(NOTE_NAMES[pitches[0]], 11, colorFor([pitches[0]]));
+      addTspan(" " + label + " ", 8, colorFor(pitches));
+      addTspan(NOTE_NAMES[pitches[1]], 11, colorFor([pitches[1]]));
+    } else {
+      addTspan(label, 8, colorFor(pitches));
+      addTspan(" " + NOTE_NAMES[pitches[0]], 11, colorFor(pitches));
+    }
     g.appendChild(t);
   });
 }
