@@ -4,6 +4,14 @@
 > Dorothy 側 `D:\Dorothy\work\music\theory-circle-app\_epic.md`。仕様・進捗の正本はそちら、
 > ここは**実コードの正本**。応答は日本語。
 
+## 警告: このrepoは guitone から相対pathで参照されている
+`D:\dev\guitone` の `crates/wasm/Cargo.toml` が `crates/core` を
+`../../../quartal-ring/crates/core` で参照している（理論の二重実装を避けるための共有）。
+そのため **このrepoの移動・改名・`crates/core` のpath変更は guitone を壊す**。
+壊れても本repo側のビルド・テストは通る＝ここでは検知できない。動かすときは guitone 側で
+`cargo build --release --target wasm32-unknown-unknown -p guitone-wasm` を実行して確認すること。
+`core` の公開APIを変更するときも同様に guitone 側の追従が要る。
+
 ## これは何か
 4度圏を軸にした**音楽理論エンジン**と、その動的表示アプリ。1つの理論コアを
 Web表示 →（将来）VST →（将来）物理楽器（RP2040/ESP32等）へ流用する計画。
