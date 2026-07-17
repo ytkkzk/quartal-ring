@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "web",
-      "runtimeExecutable": "D:\\quartal-ring\\target\\release\\dev-server.exe",
-      "runtimeArgs": ["D:\\quartal-ring\\web", "8080"],
+      "runtimeExecutable": "D:\\dev\\quartal-ring\\target\\release\\dev-server.exe",
+      "runtimeArgs": ["D:\\dev\\quartal-ring\\web", "8080"],
       "port": 8080
     }
   ]
